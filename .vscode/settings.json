@@ -1,0 +1,7 @@
+{
+  "[c]": {
+    "editor.insertSpaces": false,
+    "editor.tabSize": 8
+  },
+  "editor.formatOnSave": false
+}

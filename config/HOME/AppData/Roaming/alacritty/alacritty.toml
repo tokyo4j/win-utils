@@ -1,0 +1,11 @@
+[general]
+working_directory = "~"
+
+[terminal]
+shell = { program = "nu.exe" }
+
+[font]
+size = 13
+
+[cursor]
+style = "Beam"

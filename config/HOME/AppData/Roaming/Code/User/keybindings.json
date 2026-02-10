@@ -1,0 +1,106 @@
+[
+  {
+    "key": "f14",
+    "command": "cursorMove",
+    "when": "editorTextFocus",
+    "args": {
+      "to": "wrappedLineFirstNonWhitespaceCharacter"
+    }
+  },
+  {
+    "key": "f17",
+    "command": "cursorMove",
+    "when": "editorTextFocus",
+    "args": {
+      "to": "wrappedLineEnd"
+    }
+  },
+  {
+    "key": "shift+f14",
+    "command": "cursorMove",
+    "when": "editorTextFocus",
+    "args": {
+      "to": "wrappedLineFirstNonWhitespaceCharacter",
+      "select": true
+    }
+  },
+  {
+    "key": "shift+f17",
+    "command": "cursorMove",
+    "when": "editorTextFocus",
+    "args": {
+      "to": "wrappedLineEnd",
+      "select": true
+    }
+  },
+  {
+    "key": "ctrl+up",
+    "command": "cursorMove",
+    "when": "editorTextFocus",
+    "args": {
+      "to": "up",
+      "by": "line",
+      "value": 5
+    }
+  },
+  {
+    "key": "ctrl+down",
+    "command": "cursorMove",
+    "when": "editorTextFocus",
+    "args": {
+      "to": "down",
+      "by": "line",
+      "value": 5
+    }
+  },
+  {
+    "key": "shift+ctrl+up",
+    "command": "cursorMove",
+    "when": "editorTextFocus",
+    "args": {
+      "to": "up",
+      "by": "line",
+      "value": 5,
+      "select": true
+    }
+  },
+  {
+    "key": "shift+ctrl+down",
+    "command": "cursorMove",
+    "when": "editorTextFocus",
+    "args": {
+      "to": "down",
+      "by": "line",
+      "value": 5,
+      "select": true
+    }
+  },
+  {
+    "key": "ctrl+o",
+    "command": "workbench.action.focusFirstEditorGroup",
+    "when": "!editorTextFocus"
+  },
+  {
+    "key": "ctrl+o",
+    "command": "workbench.action.focusPanel",
+    "when": "!panelFocus"
+  },
+  {
+    "key": "f16",
+    "command": "editor.action.insertCursorAbove",
+    "when": "editorTextFocus"
+  },
+  {
+    "key": "f15",
+    "command": "editor.action.insertCursorBelow",
+    "when": "editorTextFocus"
+  },
+  {
+    "key": "ctrl+n",
+    "command": "workbench.action.toggleAuxiliaryBar"
+  },
+  {
+    "key": "ctrl+m",
+    "command": "-editor.action.toggleTabFocusMode"
+  }
+]
