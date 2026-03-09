@@ -2,97 +2,47 @@
 #include <stdio.h>
 #include <windows.h>
 
-enum modifier {
-	MOD_NONE = 0,
-	MOD_MUHENKAN = 1 << 0,
-	MOD_CAPS = 1 << 1,
-};
-
-enum action_type {
-	ACTION_KEY,
-	ACTION_CMD,
-};
-
-struct action {
-	enum action_type type;
-	union {
-		DWORD keycode;
-		const char *cmd;
-	};
-};
-
 struct keybind {
 	DWORD key;
-	DWORD modifiers;
-	struct action action;
+	DWORD sent_keycode;
 
 	BOOL activated;
 };
 
 struct context {
 	HHOOK hook;
-	DWORD active_mods;
+	BOOL muhenkan_pressed;
 	struct keybind keybinds[32];
 };
 
 static struct context ctx = {
-	.keybinds = {
+	.keybinds =
 		{
-			.key =  'H',
-			.modifiers = MOD_CAPS | MOD_MUHENKAN,
-			.action = { .type = ACTION_KEY, .keycode = VK_F14 },
+			{
+				.key = 'A',
+				.sent_keycode = VK_HOME,
+			},
+			{
+				.key = 'D',
+				.sent_keycode = VK_END,
+			},
+			{
+				.key = 'H',
+				.sent_keycode = VK_LEFT,
+			},
+			{
+				.key = 'J',
+				.sent_keycode = VK_DOWN,
+			},
+			{
+				.key = 'K',
+				.sent_keycode = VK_UP,
+			},
+			{
+				.key = 'L',
+				.sent_keycode = VK_RIGHT,
+			},
 		},
-		{
-			.key =  'J',
-			.modifiers = MOD_CAPS | MOD_MUHENKAN,
-			.action = { .type = ACTION_KEY, .keycode = VK_F15 },
-		},
-		{
-			.key =  'K',
-			.modifiers = MOD_CAPS | MOD_MUHENKAN,
-			.action = { .type = ACTION_KEY, .keycode = VK_F16 },
-		},
-		{
-			.key =  'L',
-			.modifiers = MOD_CAPS | MOD_MUHENKAN,
-			.action = { .type = ACTION_KEY, .keycode = VK_F17 },
-		},
-		{
-			.key =  'H',
-			.modifiers = MOD_MUHENKAN,
-			.action = { .type = ACTION_KEY, .keycode = VK_LEFT },
-		},
-		{
-			.key =  'J',
-			.modifiers = MOD_MUHENKAN,
-			.action = { .type = ACTION_KEY, .keycode = VK_DOWN },
-		},
-		{
-			.key =  'K',
-			.modifiers = MOD_MUHENKAN,
-			.action = { .type = ACTION_KEY, .keycode = VK_UP },
-		},
-		{
-			.key =  'L',
-			.modifiers = MOD_MUHENKAN,
-			.action = { .type = ACTION_KEY, .keycode = VK_RIGHT },
-		},
-		{
-			.key = 'A',
-			.modifiers = MOD_CAPS,
-			.action = { .type = ACTION_KEY, .keycode = VK_LWIN },
-		},
-		{
-			.key = 'S',
-			.modifiers = MOD_CAPS,
-			.action = { .type = ACTION_CMD, .cmd = "alacritty" },
-		},
-		{
-			.key = 'W',
-			.modifiers = MOD_CAPS,
-			.action = { .type = ACTION_CMD, .cmd = "explorer" },
-		},
-	},
 };
 
 static void
@@ -104,36 +54,6 @@ send_key(DWORD keycode, BOOL is_down)
 		.ki.dwFlags = is_down ? 0 : KEYEVENTF_KEYUP,
 	}};
 	SendInput(ARRAYSIZE(inputs), inputs, sizeof(inputs));
-}
-
-static enum modifier
-get_mod(DWORD code)
-{
-	switch (code) {
-	case VK_F13:
-		// Capslock is mapped to F13 via scancode map
-		return MOD_CAPS;
-	case VK_NONCONVERT:
-		return MOD_MUHENKAN;
-	default:
-		return MOD_NONE;
-	}
-}
-
-static void
-run_action(const struct action *action, BOOL is_down)
-{
-	switch (action->type) {
-	case ACTION_KEY:
-		send_key(action->keycode, is_down);
-		break;
-	case ACTION_CMD:
-		if (is_down) {
-			ShellExecuteA(NULL, "open", action->cmd,
-				NULL, NULL, SW_SHOWNORMAL);
-		}
-		break;
-	}
 }
 
 // TRUE when a includes b
@@ -148,9 +68,8 @@ match_keybind(DWORD keycode, BOOL is_down)
 			if (!kb->key) {
 				break;
 			}
-			if (kb->key == keycode
-				&& INCLUDES(ctx.active_mods, kb->modifiers)) {
-				run_action(&kb->action, TRUE);
+			if (kb->key == keycode && ctx.muhenkan_pressed) {
+				send_key(kb->sent_keycode, TRUE);
 				kb->activated = TRUE;
 				return TRUE;
 			}
@@ -163,9 +82,8 @@ match_keybind(DWORD keycode, BOOL is_down)
 			}
 			if (kb->activated
 				&& (kb->key == keycode
-					|| !INCLUDES(ctx.active_mods,
-						kb->modifiers))) {
-				run_action(&kb->action, FALSE);
+					|| !ctx.muhenkan_pressed)) {
+				send_key(kb->sent_keycode, FALSE);
 				kb->activated = FALSE;
 				return TRUE;
 			}
@@ -188,18 +106,13 @@ handle_key_event(int nCode, WPARAM wParam, LPARAM lParam)
 		goto out;
 	}
 
-	enum modifier mod = get_mod(kb_hook->vkCode);
-	if (mod) {
-		if (is_down) {
-			ctx.active_mods |= mod;
-		} else {
-			ctx.active_mods &= ~mod;
-		}
+	if (kb_hook->vkCode == VK_NONCONVERT) {
+		ctx.muhenkan_pressed = is_down;
 	}
 	if (match_keybind(kb_hook->vkCode, is_down)) {
 		return 1;
 	}
-	if (mod) {
+	if (kb_hook->vkCode == VK_NONCONVERT) {
 		return 1;
 	}
 
