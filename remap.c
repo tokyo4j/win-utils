@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <windows.h>
 
+#include <shellapi.h>
+
 struct keybind {
 	DWORD key;
 	DWORD sent_keycode;
@@ -12,10 +14,14 @@ struct keybind {
 struct context {
 	HHOOK hook;
 	BOOL muhenkan_pressed;
-	struct keybind keybinds[32];
+	BOOL active;
+	struct keybind keybinds[6];
+	HWND tray_hwnd;
+	NOTIFYICONDATAW nid;
 };
 
 static struct context ctx = {
+	.active = TRUE,
 	.keybinds =
 		{
 			{
@@ -45,6 +51,83 @@ static struct context ctx = {
 		},
 };
 
+#define WM_TRAYICON (WM_USER + 1)
+
+static LRESULT CALLBACK
+tray_wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	switch (msg) {
+	case WM_TRAYICON:
+		if (lParam == WM_LBUTTONUP) {
+			/* toggle active state */
+			ctx.active = !ctx.active;
+			if (ctx.active) {
+				wcscpy_s(ctx.nid.szTip,
+					ARRAYSIZE(ctx.nid.szTip), L"active");
+				ctx.nid.hIcon =
+					LoadIconA(NULL, IDI_APPLICATION);
+			} else {
+				wcscpy_s(ctx.nid.szTip,
+					ARRAYSIZE(ctx.nid.szTip), L"inactive");
+				ctx.nid.hIcon = LoadIconA(NULL, IDI_ERROR);
+			}
+			Shell_NotifyIconW(NIM_MODIFY, &ctx.nid);
+		} else if (lParam == WM_RBUTTONUP) {
+			/* remove tray icon and exit */
+			if (ctx.nid.cbSize) {
+				Shell_NotifyIconW(NIM_DELETE, &ctx.nid);
+			}
+			PostQuitMessage(0);
+			return 0;
+		}
+		break;
+	case WM_DESTROY:
+		if (ctx.nid.cbSize) {
+			Shell_NotifyIconW(NIM_DELETE, &ctx.nid);
+		}
+		PostQuitMessage(0);
+		return 0;
+	}
+	return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+static int
+create_tray_window_and_icon(void)
+{
+	WNDCLASSW wc = {
+		.lpfnWndProc = tray_wndproc,
+		.hInstance = GetModuleHandle(NULL),
+		.lpszClassName = L"remap_tray_class",
+	};
+
+	if (!RegisterClassW(&wc)
+		&& GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+		return 1;
+	}
+
+	ctx.tray_hwnd = CreateWindowExW(0, wc.lpszClassName, L"remap_tray", 0,
+		0, 0, 0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
+	if (!ctx.tray_hwnd) {
+		return 1;
+	}
+
+	NOTIFYICONDATAW nid = {
+		.cbSize = sizeof(nid),
+		.hWnd = ctx.tray_hwnd,
+		.uID = 1,
+		.uCallbackMessage = WM_TRAYICON,
+		.hIcon = LoadIconA(NULL, IDI_APPLICATION),
+		.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP,
+	};
+	wcscpy_s(nid.szTip, ARRAYSIZE(nid.szTip), L"active");
+	ctx.nid = nid;
+
+	if (!Shell_NotifyIconW(NIM_ADD, &ctx.nid)) {
+		return 1;
+	}
+	return 0;
+}
+
 static void
 send_key(DWORD keycode, BOOL is_down)
 {
@@ -59,34 +142,32 @@ send_key(DWORD keycode, BOOL is_down)
 static BOOL
 match_keybind(DWORD keycode, BOOL is_down)
 {
+	if (!ctx.active) {
+		return FALSE;
+	}
+	BOOL consumed = FALSE;
 	if (is_down) {
-		for (size_t i = 0;; i++) {
+		for (size_t i = 0; i < ARRAYSIZE(ctx.keybinds); i++) {
 			struct keybind *kb = &ctx.keybinds[i];
-			if (!kb->key) {
-				break;
-			}
 			if (kb->key == keycode && ctx.muhenkan_pressed) {
 				send_key(kb->sent_keycode, TRUE);
 				kb->activated = TRUE;
-				return TRUE;
+				consumed = TRUE;
 			}
 		}
 	} else {
-		for (size_t i = 0;; i++) {
+		for (size_t i = 0; i < ARRAYSIZE(ctx.keybinds); i++) {
 			struct keybind *kb = &ctx.keybinds[i];
-			if (!kb->key) {
-				break;
-			}
 			if (kb->activated
 				&& (kb->key == keycode
 					|| !ctx.muhenkan_pressed)) {
 				send_key(kb->sent_keycode, FALSE);
 				kb->activated = FALSE;
-				return TRUE;
+				consumed = TRUE;
 			}
 		}
 	}
-	return FALSE;
+	return consumed;
 }
 
 static LRESULT CALLBACK
@@ -120,18 +201,16 @@ out:
 int
 main(void)
 {
-	CHAR home_dir[256] = {0};
-	DWORD home_len = GetEnvironmentVariableA("USERPROFILE", home_dir,
-		sizeof(home_dir));
-	if (home_len > 0) {
-		SetCurrentDirectoryA(home_dir);
-	}
-
 	ctx.hook = SetWindowsHookExW(WH_KEYBOARD_LL, handle_key_event,
 		GetModuleHandle(NULL), 0);
 	if (!ctx.hook) {
 		fprintf(stderr, "SetWindowsHookEx failed: %lu\n",
 			GetLastError());
+		return 1;
+	}
+
+	if (create_tray_window_and_icon() != 0) {
+		fprintf(stderr, "Failed to create tray icon\n");
 		return 1;
 	}
 
