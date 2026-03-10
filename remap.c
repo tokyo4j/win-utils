@@ -56,9 +56,6 @@ send_key(DWORD keycode, BOOL is_down)
 	SendInput(ARRAYSIZE(inputs), inputs, sizeof(inputs));
 }
 
-// TRUE when a includes b
-#define INCLUDES(a, b) (((a) & (b)) == (b))
-
 static BOOL
 match_keybind(DWORD keycode, BOOL is_down)
 {
